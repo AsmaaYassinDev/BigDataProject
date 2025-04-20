@@ -1,0 +1,195 @@
+{
+	"name": "Education LevelvsNutritionBehavior",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "SparkPool01",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "38791d39-9a0d-4629-956e-e038bc662078"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1",
+				"state": {
+					"7bd6f1b9-f306-4849-9226-9d4d9c79303f": {
+						"type": "Synapse.DataFrame",
+						"sync_state": {
+							"table": {
+								"rows": [
+									{
+										"0": "High school graduate",
+										"1": "Percent of adults who report consuming vegetables less than one time daily",
+										"2": "23.94782608695652"
+									},
+									{
+										"0": "Less than high school",
+										"1": "Percent of adults who report consuming vegetables less than one time daily",
+										"2": "31.8608695652174"
+									},
+									{
+										"0": "College graduate",
+										"1": "Percent of adults who report consuming fruit less than one time daily",
+										"2": "32.92981366459628"
+									},
+									{
+										"0": "Less than high school",
+										"1": "Percent of adults who report consuming fruit less than one time daily",
+										"2": "43.22298136645963"
+									},
+									{
+										"0": "Some college or technical school",
+										"1": "Percent of adults who report consuming vegetables less than one time daily",
+										"2": "18.54534161490683"
+									},
+									{
+										"0": "College graduate",
+										"1": "Percent of adults who report consuming vegetables less than one time daily",
+										"2": "13.411180124223602"
+									},
+									{
+										"0": "Some college or technical school",
+										"1": "Percent of adults who report consuming fruit less than one time daily",
+										"2": "40.24968944099379"
+									},
+									{
+										"0": "High school graduate",
+										"1": "Percent of adults who report consuming fruit less than one time daily",
+										"2": "43.672049689440996"
+									}
+								],
+								"schema": [
+									{
+										"key": "0",
+										"name": "Education Level",
+										"type": "string"
+									},
+									{
+										"key": "1",
+										"name": "Question",
+										"type": "string"
+									},
+									{
+										"key": "2",
+										"name": "Average % Reporting LOW Fruit/Vegetable Consumption by Education Level",
+										"type": "double"
+									}
+								],
+								"truncated": false
+							},
+							"isSummary": false,
+							"language": "scala",
+							"wranglerEntryContext": {
+								"candidateVariableNames": [
+									"df_summary"
+								],
+								"dataframeType": "pyspark"
+							}
+						},
+						"persist_state": {
+							"view": {
+								"type": "details",
+								"chartOptions": {
+									"chartType": "column",
+									"aggregationType": "avg",
+									"categoryFieldKeys": [
+										"0"
+									],
+									"seriesFieldKeys": [
+										"2"
+									],
+									"isStacked": false,
+									"pivotFieldKey": "1"
+								}
+							}
+						}
+					}
+				}
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/33b0df95-be77-4791-89e3-a10226e5b46d/resourceGroups/bigdata-rg/providers/Microsoft.Synapse/workspaces/bigsynapsews01/bigDataPools/SparkPool01",
+				"name": "SparkPool01",
+				"type": "Spark",
+				"endpoint": "https://bigsynapsews01.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/SparkPool01",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"# Notebook 1: Descriptive Analysis on Nutrition Behavior by Education Level (PySpark for Synapse)\n",
+					"\n",
+					"# Load CSV from Azure Data Lake Gen2\n",
+					"df = spark.read.format(\"csv\") \\\n",
+					"    .option(\"header\", \"true\") \\\n",
+					"    .option(\"inferSchema\", \"true\") \\\n",
+					"    .load(\"abfss://bigdata-project@nutritionedudatalake.dfs.core.windows.net/raw/nutrition_data/Nutrition__Physical_Activity__and_Obesity_-_Behavioral_Risk_Factor_Surveillance_System.csv\")\n",
+					"\n",
+					"# Filter: Fruits and Vegetables + Education + relevant questions\n",
+					"df_filtered = df.filter(\n",
+					"    (df[\"Class\"] == \"Fruits and Vegetables\") &\n",
+					"    (df[\"StratificationCategory1\"] == \"Education\") &\n",
+					"    (df[\"Question\"].isin([\n",
+					"        \"Percent of adults who report consuming fruit less than one time daily\",\n",
+					"        \"Percent of adults who report consuming vegetables less than one time daily\"\n",
+					"    ]))\n",
+					")\n",
+					"\n",
+					"# Group & average: Education Level vs. Nutrition Behavior (Mean)\n",
+					"summary_df = df_filtered.groupBy(\"Stratification1\", \"Question\") \\\n",
+					"    .avg(\"Data_Value\") \\\n",
+					"    .withColumnRenamed(\"avg(Data_Value)\", \"Average % Reporting LOW Fruit/Vegetable Consumption by Education Level\") \\\n",
+					"    .withColumnRenamed(\"Stratification1\", \"Education Level\")\n",
+					"\n",
+					"# Show the result table\n",
+					"\n",
+					"\n",
+					"# Save summary_df to Azure Data Lake as Parquet\n",
+					"summary_df.write.mode(\"overwrite\").parquet(\n",
+					"    \"abfss://bigdata-project@nutritionedudatalake.dfs.core.windows.net/processed/EducationLevelvsNutritionBehaviorSummary_table.parquet\"\n",
+					")\n",
+					"\n",
+					"# Load it again to register as Spark Table\n",
+					"df_summary = spark.read.parquet(\"abfss://bigdata-project@nutritionedudatalake.dfs.core.windows.net/processed/EducationLevelvsNutritionBehaviorSummary_table.parquet\")\n",
+					"display(df_summary)\n",
+					"# Register it as a Spark table to appear in Synapse Studio > Data\n",
+					"df_summary.write.mode(\"overwrite\").saveAsTable(\"EducationLevelvsNutritionBehaviorSummary_table\")\n",
+					""
+				],
+				"execution_count": 6
+			}
+		]
+	}
+}

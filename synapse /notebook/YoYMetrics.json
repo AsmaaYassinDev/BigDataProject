@@ -1,0 +1,139 @@
+{
+	"name": "YoYMetrics",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "SparkPool01",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "3068c4d4-1723-4e1a-9afe-625cf1934096"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/33b0df95-be77-4791-89e3-a10226e5b46d/resourceGroups/bigdata-rg/providers/Microsoft.Synapse/workspaces/bigsynapsews01/bigDataPools/SparkPool01",
+				"name": "SparkPool01",
+				"type": "Spark",
+				"endpoint": "https://bigsynapsews01.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/SparkPool01",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"# File path to your dataset in Azure Data Lake\n",
+					"file_path = 'abfss://bigdata-project@nutritionedudatalake.dfs.core.windows.net/raw/nutrition_data/Nutrition__Physical_Activity__and_Obesity_-_Behavioral_Risk_Factor_Surveillance_System.csv'\n",
+					"\n",
+					"# Imports\n",
+					"import pandas as pd\n",
+					"import matplotlib.pyplot as plt\n",
+					"import seaborn as sns\n",
+					"\n",
+					"# Load and filter\n",
+					"df = pd.read_csv(file_path)\n",
+					"df_filtered = df[(df['Class'] == 'Fruits and Vegetables') & (df['StratificationCategory1'] == 'Education')]\n",
+					"\n",
+					"# Group and average\n",
+					"summary = (\n",
+					"    df_filtered\n",
+					"    .groupby(['YearStart', 'Stratification1', 'Question'])['Data_Value']\n",
+					"    .mean()\n",
+					"    .reset_index()\n",
+					"    .rename(columns={\n",
+					"        'Stratification1': 'Education Level',\n",
+					"        'YearStart': 'Year',\n",
+					"        'Data_Value': 'Average %'\n",
+					"    })\n",
+					")\n",
+					"\n",
+					"# Rename Question to Nutrition Behavior\n",
+					"summary = summary.rename(columns={'Question': 'Nutrition Behavior'})\n",
+					"\n",
+					"# Calculate Year-over-Year % Change\n",
+					"summary = summary.sort_values(by=['Education Level', 'Nutrition Behavior', 'Year'])\n",
+					"summary['YoY % Change'] = summary.groupby(['Education Level', 'Nutrition Behavior'])['Average %'].pct_change() * 100\n",
+					"\n",
+					"# Plotting\n",
+					"plt.figure(figsize=(14, 6))\n",
+					"sns.set(style='whitegrid')\n",
+					"sns.lineplot(\n",
+					"    data=summary,\n",
+					"    x='Year',\n",
+					"    y='YoY % Change',\n",
+					"    hue='Education Level',\n",
+					"    style='Nutrition Behavior',\n",
+					"    markers=True\n",
+					")\n",
+					"plt.title('Yearly Percentage Change in Fruit and Vegetable Consumption by Education Level')\n",
+					"plt.xlabel('Year')\n",
+					"plt.ylabel('Year-over-Year % Change')\n",
+					"plt.legend(title='Education Level / Nutrition Behavior', bbox_to_anchor=(1.05, 1), loc='upper left')\n",
+					"plt.tight_layout()\n",
+					"plt.show()\n",
+					"\n",
+					"# Overall biggest increase and drop (any nutrition behavior)\n",
+					"largest_increase = summary.loc[summary['YoY % Change'].idxmax()]\n",
+					"print(f\"📈 Highest YoY Increase: {largest_increase['Education Level']} - {largest_increase['Nutrition Behavior']} in {int(largest_increase['Year'])} ({largest_increase['YoY % Change']:.2f}%)\")\n",
+					"\n",
+					"largest_drop = summary.loc[summary['YoY % Change'].idxmin()]\n",
+					"print(f\"📉 Largest YoY Drop: {largest_drop['Education Level']} - {largest_drop['Nutrition Behavior']} in {int(largest_drop['Year'])} ({largest_drop['YoY % Change']:.2f}%)\")\n",
+					"\n",
+					"# Specific to Fruits\n",
+					"fruit_data = summary[summary['Nutrition Behavior'].str.contains('fruit', case=False)]\n",
+					"fruit_increase = fruit_data.loc[fruit_data['YoY % Change'].idxmax()]\n",
+					"fruit_drop = fruit_data.loc[fruit_data['YoY % Change'].idxmin()]\n",
+					"\n",
+					"print(f\"\\n🍎 Highest YoY Increase (Fruit): {fruit_increase['Education Level']} - {fruit_increase['Nutrition Behavior']} in {int(fruit_increase['Year'])} ({fruit_increase['YoY % Change']:.2f}%)\")\n",
+					"print(f\"🍏 Largest YoY Drop (Fruit): {fruit_drop['Education Level']} - {fruit_drop['Nutrition Behavior']} in {int(fruit_drop['Year'])} ({fruit_drop['YoY % Change']:.2f}%)\")\n",
+					"\n",
+					"# Specific to Vegetables\n",
+					"veg_data = summary[summary['Nutrition Behavior'].str.contains('vegetable', case=False)]\n",
+					"veg_increase = veg_data.loc[veg_data['YoY % Change'].idxmax()]\n",
+					"veg_drop = veg_data.loc[veg_data['YoY % Change'].idxmin()]\n",
+					"\n",
+					"print(f\"\\n🥦 Highest YoY Increase (Vegetable): {veg_increase['Education Level']} - {veg_increase['Nutrition Behavior']} in {int(veg_increase['Year'])} ({veg_increase['YoY % Change']:.2f}%)\")\n",
+					"print(f\"🥬 Largest YoY Drop (Vegetable): {veg_drop['Education Level']} - {veg_drop['Nutrition Behavior']} in {int(veg_drop['Year'])} ({veg_drop['YoY % Change']:.2f}%)\")\n",
+					"\n",
+					"# Convert summary to Spark DataFrame\n",
+					"spark_df = spark.createDataFrame(summary)\n",
+					"\n",
+					"# Save to ADLS as CSV\n",
+					"output_path = \"abfss://bigdata-project@nutritionedudatalake.dfs.core.windows.net/processed/'Yearly Percentage Change in Fruit and Vegetable Consumption by Education Level\"\n",
+					"spark_df.write.mode(\"overwrite\").option(\"header\", \"true\").csv(output_path)"
+				],
+				"execution_count": 11
+			}
+		]
+	}
+}

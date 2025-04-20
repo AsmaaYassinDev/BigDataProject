@@ -1,0 +1,134 @@
+{
+	"name": "AnalysisOnHealthyEatingByEducationLevel",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "SparkPool01",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "e2cbc49b-8117-4c2c-b8b8-f5ca110e1a3e"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"synapse_widget": {
+				"version": "0.1"
+			},
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/33b0df95-be77-4791-89e3-a10226e5b46d/resourceGroups/bigdata-rg/providers/Microsoft.Synapse/workspaces/bigsynapsews01/bigDataPools/SparkPool01",
+				"name": "SparkPool01",
+				"type": "Spark",
+				"endpoint": "https://bigsynapsews01.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/SparkPool01",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.4",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "code",
+				"source": [
+					"# Notebook 1: Descriptive Analysis on Healthy Eating by Education Level\n",
+					"\n",
+					"import pandas as pd\n",
+					"import matplotlib.pyplot as plt\n",
+					"import seaborn as sns\n",
+					"from scipy.stats import f_oneway\n",
+					"\n",
+					"# Load dataset\n",
+					"file_path = 'abfss://bigdata-project@nutritionedudatalake.dfs.core.windows.net/raw/nutrition_data/Nutrition__Physical_Activity__and_Obesity_-_Behavioral_Risk_Factor_Surveillance_System.csv'\n",
+					"df = pd.read_csv(file_path)\n",
+					"\n",
+					"# Filter: Fruits and Vegetables + Education\n",
+					"df_filtered = df[(df['Class'] == 'Fruits and Vegetables') & (df['StratificationCategory1'] == 'Education')]\n",
+					"\n",
+					"# Group & average: Education Level vs. Healthy Eating (Mean)\n",
+					"summary = (\n",
+					"    df_filtered\n",
+					"    .groupby(['Stratification1', 'Question'])['Data_Value']\n",
+					"    .mean()\n",
+					"    .reset_index()\n",
+					"    .rename(columns={'Stratification1': 'Education Level', 'Data_Value': 'Average %'})\n",
+					")\n",
+					"\n",
+					"# Plot\n",
+					"plt.figure(figsize=(12, 6))\n",
+					"sns.barplot(data=summary, x='Average %', y='Education Level', hue='Question')  # Added hue to avoid the warning\n",
+					"plt.title('Average % Reporting LOW Fruit/Vegetable Consumption by Education Level')\n",
+					"plt.xlabel('% Reporting <1x Daily Consumption')\n",
+					"plt.ylabel('Education Level')\n",
+					"plt.tight_layout()\n",
+					"plt.show()\n",
+					"\n",
+					"# Metric 1: Bottom Performing Education Level (Lowest average unhealthy eating)\n",
+					"bottom_level = summary.groupby('Education Level')['Average %'].mean().idxmin()\n",
+					"bottom_value = summary.groupby('Education Level')['Average %'].mean().min()\n",
+					"print(f\"🎯 Education level with lowest average unhealthy eating: {bottom_level} ({bottom_value:.2f}%)\")\n",
+					"\n",
+					"# Metric 2: Gap between highest and lowest (Now reflecting the worst performance gap)\n",
+					"edu_avg = summary.groupby('Education Level')['Average %'].mean()\n",
+					"\n",
+					"# Find the education levels corresponding to the highest and lowest average unhealthy eating\n",
+					"max_edu_level = edu_avg.idxmax()  # Education level with the highest average\n",
+					"max_value = edu_avg.max()         # Highest average unhealthy eating value\n",
+					"min_edu_level = edu_avg.idxmin()  # Education level with the lowest average\n",
+					"min_value = edu_avg.min()         # Lowest average unhealthy eating value\n",
+					"\n",
+					"# Calculate the gap\n",
+					"gap = max_value - min_value\n",
+					"\n",
+					"# Print results\n",
+					"print(f\"📉 Gap between highest and lowest average unhealthy eating: {gap:.2f}%\")\n",
+					"print(f\"📈 Highest unhealthy eating: {max_edu_level} ({max_value:.2f}%)\")\n",
+					"print(f\"📉 Lowest unhealthy eating: {min_edu_level} ({min_value:.2f}%)\")\n",
+					"\n",
+					"\n",
+					"\n",
+					"# 1. Statistical Test\n",
+					"groups = [group['Average %'] for _, group in summary.groupby('Education Level')]\n",
+					"f_stat, p_value = f_oneway(*groups)\n",
+					"print(f\"🔬 ANOVA p-value: {p_value:.4f} (significant if < 0.05)\")\n",
+					"\n",
+					"# 2. Weighted Average (if sample size exists)\n",
+					"if 'Sample_Size' in df_filtered.columns:\n",
+					"    summary_weighted = df_filtered.groupby('Stratification1').apply(\n",
+					"        lambda x: (x['Data_Value'] * x['Sample_Size']).sum() / x['Sample_Size'].sum()\n",
+					"    ).reset_index(name='Weighted Avg %')\n",
+					"    print(\"📊 Weighted Averages:\\n\", summary_weighted)\n",
+					"\n",
+					"# 3. Plot with National Average\n",
+					"national_avg = df_filtered['Data_Value'].mean()\n",
+					"plt.axvline(national_avg, color='red', linestyle='--', label=f'National Avg: {national_avg:.1f}%')\n",
+					"plt.legend()\n",
+					"\n",
+					""
+				],
+				"execution_count": 12
+			}
+		]
+	}
+}
